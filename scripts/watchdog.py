@@ -34,9 +34,15 @@ def log(msg):
     print(f"[watchdog {time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
+UA = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"
+}
+
+
 def public_ok(timeout=15):
     try:
-        with urllib.request.urlopen(SITE + "/api/health", timeout=timeout) as r:
+        req = urllib.request.Request(SITE + "/api/health", headers=UA)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status == 200
     except Exception:
         return False
