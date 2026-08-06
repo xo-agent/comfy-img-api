@@ -61,30 +61,38 @@ def running_boxes():
     out = []
     for b in boxes:
         try:
-            out.append({"id": b.sandbox_id, "state": b.state, "template": getattr(b, "template_id", ""), "info": b.get_info()})
+            st = getattr(b.state, "value", b.state)
+            out.append(
+                {
+                    "id": b.sandbox_id,
+                    "state": st,
+                    "template": getattr(b, "template_id", ""),
+                    "end_at": getattr(b, "end_at", None),
+                }
+            )
         except Exception as e:
             log(f"info failed for {b.sandbox_id}: {e}")
     return [b for b in out if b["state"] == "running"]
 
 
 def age_info(b):
-    d = b["info"]
-    end = d.get("end_at") if isinstance(d, dict) else getattr(d, "end_at", None)
+    end = b.get("end_at")
     if not end:
         return None
     try:
-        end_ts = end.timestamp() if hasattr(end, "timestamp") else None
-        if end_ts is None and isinstance(end, str):
+        if hasattr(end, "timestamp"):
+            return end.timestamp() - time.time()
+        if isinstance(end, str):
             end_ts = time.mktime(time.strptime(end.split("+")[0], "%Y-%m-%d %H:%M:%S"))
-        return end_ts - time.time()
+            return end_ts - time.time()
     except Exception as e:
         log(f"end_at parse failed: {e}")
-        return None
+    return None
 
 
 def boot(box):
-    """Inject secrets, pull code, start stack."""
-    sb = Sandbox.connect(box["id"])
+    """Inject secrets, pull code, start stack. box = Sandbox or dict."""
+    sb = box if isinstance(box, Sandbox) else Sandbox.connect(box["id"])
     sid = sb.sandbox_id
     log(f"booting {sid}")
     tok = os.environ["CF_TUNNEL_TOKEN"]
