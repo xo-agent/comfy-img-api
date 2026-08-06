@@ -1,0 +1,29 @@
+name: watchdog
+
+on:
+  schedule:
+    - cron: "*/45 * * * *"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install e2b SDK
+        run: pip install --quiet e2b
+      - name: Run watchdog
+        env:
+          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+          CF_TUNNEL_TOKEN: ${{ secrets.CF_TUNNEL_TOKEN }}
+          E2B_TEMPLATE: comfy-serve
+          SITE_URL: https://ox-img.oxu.indevs.in
+        run: python scripts/watchdog.py

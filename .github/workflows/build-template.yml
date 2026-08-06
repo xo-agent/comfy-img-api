@@ -1,0 +1,29 @@
+name: build-template
+
+on:
+  workflow_dispatch:
+    inputs:
+      template_name:
+        description: "E2B template name to build"
+        required: false
+        default: "comfy-serve"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install e2b SDK
+        run: pip install --quiet e2b
+      - name: Build template
+        env:
+          E2B_API_KEY: ${{ secrets.E2B_API_KEY }}
+          TEMPLATE_NAME: ${{ github.event.inputs.template_name }}
+        run: python scripts/build_template.py

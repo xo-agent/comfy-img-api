@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ox-Img — Free Image Generator</title>
+<style>
+  :root { --bg:#0a0e17; --panel:#111726; --line:#1f2a44; --acc:#00e5ff; --acc2:#7c4dff; --txt:#dbe6ff; --dim:#7a8ab5; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:radial-gradient(1200px 600px at 80% -10%, #16204a 0%, var(--bg) 55%); color:var(--txt);
+         font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
+  .wrap { max-width:1080px; margin:0 auto; padding:28px 20px 60px; }
+  header { display:flex; align-items:baseline; gap:14px; margin-bottom:22px; }
+  h1 { font-size:26px; letter-spacing:2px; background:linear-gradient(90deg,var(--acc),var(--acc2));
+       -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub { color:var(--dim); font-size:12px; }
+  .grid { display:grid; grid-template-columns:380px 1fr; gap:20px; }
+  @media (max-width:860px){ .grid{ grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+  label { display:block; font-size:11px; letter-spacing:1px; color:var(--dim); margin:12px 0 5px; text-transform:uppercase; }
+  textarea, input[type=text], input[type=number] { width:100%; background:#0b1120; border:1px solid var(--line);
+       border-radius:8px; color:var(--txt); padding:9px 11px; font-size:14px; outline:none; }
+  textarea:focus, input:focus { border-color:var(--acc); }
+  textarea { resize:vertical; min-height:76px; }
+  .row { display:flex; gap:10px; }
+  .row > div { flex:1; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .val { float:right; color:var(--acc); font-weight:600; }
+  .presets { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+  .chip { background:#0b1120; border:1px solid var(--line); color:var(--dim); padding:4px 10px; border-radius:999px;
+          font-size:12px; cursor:pointer; }
+  .chip:hover { border-color:var(--acc); color:var(--acc); }
+  button#go { width:100%; margin-top:16px; padding:12px; border:none; border-radius:10px; cursor:pointer;
+       font-size:15px; font-weight:700; letter-spacing:1px; color:#04121a;
+       background:linear-gradient(90deg,var(--acc),var(--acc2)); }
+  button#go:disabled { opacity:.55; cursor:wait; }
+  .status { margin-top:10px; font-size:12px; color:var(--dim); min-height:16px; text-align:center; }
+  #results { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; }
+  .card-img { background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .card-img img { width:100%; display:block; }
+  .meta { padding:8px 10px; font-size:11px; color:var(--dim); }
+  .empty { color:var(--dim); text-align:center; padding:60px 0; border:1px dashed var(--line); border-radius:14px; }
+  .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--acc);
+          border-radius:50%; animation:sp .8s linear infinite; vertical-align:-2px; margin-right:8px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  .api { margin-top:18px; font-size:11px; color:var(--dim); }
+  .api code { background:#0b1120; padding:1px 6px; border-radius:4px; color:var(--acc); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>OX-IMG</h1>
+    <span class="sub">stable diffusion · free · e2b-powered</span>
+    <span class="sub" id="hstat"></span>
+  </header>
+  <div class="grid">
+    <div class="card">
+      <label>Prompt</label>
+      <textarea id="prompt" placeholder="a neon cyberpunk city at night, rain, cinematic..."></textarea>
+      <div class="presets" id="presets"></div>
+      <label>Negative prompt</label>
+      <textarea id="neg" style="min-height:44px">ugly, blurry, low quality, deformed, watermark, text</textarea>
+      <div class="row">
+        <div><label>Steps <span class="val" id="v_steps">16</span></label><input type="range" id="steps" min="4" max="40" value="16"></div>
+        <div><label>CFG <span class="val" id="v_cfg">7.0</span></label><input type="range" id="cfg" min="1" max="15" value="7" step="0.5"></div>
+      </div>
+      <div class="row">
+        <div><label>Size</label>
+          <select id="size" style="width:100%;background:#0b1120;border:1px solid var(--line);color:var(--txt);padding:9px;border-radius:8px">
+            <option value="256">256×256</option>
+            <option value="384" selected>384×384</option>
+            <option value="512">512×512</option>
+            <option value="768">768×768</option>
+          </select>
+        </div>
+        <div><label>Batch</label>
+          <select id="batch" style="width:100%;background:#0b1120;border:1px solid var(--line);color:var(--txt);padding:9px;border-radius:8px">
+            <option value="1" selected>1</option><option value="2">2</option><option value="4">4</option>
+          </select>
+        </div>
+      </div>
+      <label>Seed <span class="val">(-1 = random)</span></label>
+      <input type="text" id="seed" value="-1">
+      <button id="go">GENERATE</button>
+      <div class="status" id="status"></div>
+    </div>
+    <div>
+      <div class="empty" id="empty">generated images appear here</div>
+      <div id="results"></div>
+    </div>
+  </div>
+  <div class="api">
+    <b>API</b> — <code>POST /api/generate</code> <code>{"prompt":"...","steps":16,"width":384,"height":384}</code>
+    → JSON with base64 PNGs · <code>GET /api/health</code> · <code>GET /api/stats</code>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const presets = ["cyberpunk","photoreal","anime","fantasy","oil painting","steampunk","synthwave","portrait"];
+presets.forEach(p => { const c=document.createElement("span"); c.className="chip"; c.textContent=p;
+  c.onclick=()=>{ $("prompt").value = p + ", " + $("prompt").value.replace(/^(cyberpunk|photoreal|anime|fantasy|oil painting|steampunk|synthwave|portrait),\s*/,""); }; $("presets").appendChild(c); });
+$("steps").oninput=e=>$("v_steps").textContent=e.target.value;
+$("cfg").oninput=e=>$("v_cfg").textContent=e.target.value;
+
+async function health(){
+  try{ const r=await fetch("/api/health"); const j=await r.json();
+    $("hstat").textContent = j.comfyui ? "· comfy: online" : "· comfy: warming"; }catch(e){ $("hstat").textContent="· offline"; }
+}
+health(); setInterval(health, 60000);
+
+$("go").onclick = async () => {
+  const btn=$("go"); btn.disabled=true;
+  $("status").innerHTML='<span class="spin"></span>queued — CPU generation takes ~1–3 min';
+  $("empty").style.display="none";
+  try{
+    const r = await fetch("/api/generate", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        prompt: $("prompt").value, negative_prompt: $("neg").value,
+        steps: +$("steps").value, cfg: +$("cfg").value,
+        width: +$("size").value, height: +$("size").value,
+        batch: +$("batch").value, seed: +$("seed").value })});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail || r.status);
+    $("status").innerHTML = `done in ${j.elapsed_s}s · seed ${j.seed}`;
+    const box=$("results");
+    j.images.forEach(im => {
+      const d=document.createElement("div"); d.className="card-img";
+      const img=document.createElement("img"); img.src=im.url; img.loading="lazy";
+      const m=document.createElement("div"); m.className="meta"; m.textContent=im.name;
+      d.append(img,m); box.prepend(d);
+    });
+  }catch(e){ $("status").innerHTML = "error: " + e.message; }
+  btn.disabled=false;
+};
+</script>
+</body>
+</html>
