@@ -113,10 +113,29 @@ def spawn(template):
     return sb
 
 
-def wait_public(sb, wait_s):
+def box_ready(sb):
+    """New box is serving: uvicorn on :80 AND cloudflared registered tunnel."""
+    try:
+        r = sb.commands.run(
+            "ss -tln | grep -q ':80 ' && grep -q 'Registered tunnel connection' /tmp/cf.log && echo READY || echo NOT_READY",
+            timeout=30,
+        )
+        return "READY" in r.stdout
+    except Exception:
+        return False
+
+
+def wait_public(sb, wait_s, require_internal=False):
+    """Wait for service. In replacement mode require the NEW box's own stack to
+    be up (old box still serves the public URL, so public_ok alone would let us
+    kill the old box before the new one is ready -> gap)."""
     t0 = time.time()
     while time.time() - t0 < wait_s:
-        if public_ok():
+        if require_internal:
+            if box_ready(sb) and public_ok():
+                log(f"NEW BOX READY after {int(time.time()-t0)}s (internal + public)")
+                return True
+        elif public_ok():
             log(f"PUBLIC HEALTH OK after {int(time.time()-t0)}s")
             return True
         # nudge: if stack died, restart once
@@ -153,7 +172,7 @@ def main():
         log("all boxes near expiry — spawning replacement (zero-downtime overlap)")
         sb = spawn(TEMPLATE)
         boot(sb)
-        if wait_public(sb, HEALTH_WAIT_S):
+        if wait_public(sb, HEALTH_WAIT_S, require_internal=True):
             for b in boxes:
                 try:
                     Sandbox.connect(b["id"]).kill()
