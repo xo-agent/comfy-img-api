@@ -36,7 +36,7 @@ fi
 
 # app repo — clone into /home/user/comfy-img-api, symlink /home/user/app -> app/
 if [ ! -d /home/user/comfy-img-api/.git ]; then
-  git clone -q https://github.com/xo-agent/comfy-img-api /home/user/comfy-img-api
+  git clone -q -b main https://github.com/xo-agent/comfy-img-api /home/user/comfy-img-api
 fi
 ln -sfn /home/user/comfy-img-api/app /home/user/app
 ls /home/user/app
