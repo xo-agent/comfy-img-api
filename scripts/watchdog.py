@@ -26,7 +26,7 @@ from e2b import Sandbox  # noqa: E402
 TEMPLATE = os.environ.get("E2B_TEMPLATE", "comfy-serve")
 FALLBACK = os.environ.get("E2B_FALLBACK_TEMPLATE", "desktop")
 SITE = os.environ.get("SITE_URL", "https://ox-img.oxu.indevs.in")
-REPLACE_BEFORE_S = int(os.environ.get("REPLACE_BEFORE_S", "2700"))  # 45 min: every 45-min cron tick forces a replacement -> phase stays locked, no gaps
+REPLACE_BEFORE_S = int(os.environ.get("REPLACE_BEFORE_S", "3000"))  # 50 min > 45-min cron cadence: every cron tick sees <50 min left -> always replaces, phase locked, zero gaps
 HEALTH_WAIT_S = int(os.environ.get("HEALTH_WAIT_S", "600"))
 
 
