@@ -14,8 +14,8 @@ done
 echo "secrets present: cf_token=$(test -s .cf_token && echo yes || echo no) e2b_id=$(test -s .e2b_id && echo yes || echo no) e2b_key=$(test -s .e2b_key && echo yes || echo no)"
 
 # 2) pull latest app code (public repo, no auth)
-if [ -d app/.git ]; then
-  git -C app pull --ff-only -q 2>/dev/null && echo "app updated" || echo "app pull failed (using baked copy)"
+if [ -d /home/user/comfy-img-api/.git ]; then
+  git -C /home/user/comfy-img-api pull --ff-only -q 2>/dev/null && echo "app updated" || echo "app pull failed (using baked copy)"
 fi
 
 # 3) start ComfyUI (CPU)

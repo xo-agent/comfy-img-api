@@ -34,10 +34,11 @@ if [ ! -x /home/user/cloudflared ]; then
 fi
 /home/user/cloudflared --version | head -1
 
-# app repo
-if [ ! -d /home/user/app/.git ]; then
-  git clone -q https://github.com/xo-agent/comfy-img-api /home/user/app
+# app repo — clone into /home/user/comfy-img-api, symlink /home/user/app -> app/
+if [ ! -d /home/user/comfy-img-api/.git ]; then
+  git clone -q https://github.com/xo-agent/comfy-img-api /home/user/comfy-img-api
 fi
+ln -sfn /home/user/comfy-img-api/app /home/user/app
 ls /home/user/app
 
 # smoke: comfy import
