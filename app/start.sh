@@ -26,10 +26,10 @@ for i in $(seq 1 120); do
   sleep 2
 done
 
-# 4) start FastAPI (serves site + API on :8000)
+# 4) start FastAPI (serves site + API on :80 — the CF tunnel route target)
 cd /home/user/app
-nohup /home/user/ComfyUI/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/app.log 2>&1 &
-echo "uvicorn started"
+nohup sudo -n /home/user/ComfyUI/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 80 > /tmp/app.log 2>&1 &
+echo "uvicorn started on :80"
 
 # 5) start cloudflared tunnel -> ox-img.oxu.indevs.in
 nohup /home/user/cloudflared tunnel --no-autoupdate run --token "$(cat /home/user/.cf_token)" > /tmp/cf.log 2>&1 &
