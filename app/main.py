@@ -4,18 +4,21 @@ import json
 import os
 import time
 import urllib.request
+import uuid
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 COMFY = "http://127.0.0.1:8188"
 OUT = Path("/home/user/ComfyUI/output")
 CKPT = "v1-5-pruned-emaonly.safetensors"
 START = time.time()
+JOBS = {}  # job_id -> dict
+MAX_JOBS = 50
 
-app = FastAPI(title="Ox-Img", version="1.0.0")
+app = FastAPI(title="Ox-Img", version="1.1.0")
 
 
 class GenRequest(BaseModel):
@@ -80,6 +83,64 @@ def build_wf(p: GenRequest, seed: int) -> dict:
     }
 
 
+def _submit(req: GenRequest, seed: int):
+    return _post("/prompt", {"prompt": build_wf(req, seed), "client_id": "ox-img-api"}, timeout=30)
+
+
+def _poll_history(pid: str):
+    try:
+        return _get(f"/history/{pid}", timeout=10)
+    except Exception:
+        return {}
+
+
+def _collect_images(h: dict, pid: str):
+    images = []
+    for node_id, node_out in h[pid]["outputs"].items():
+        for img in node_out.get("images", []):
+            fname = img["filename"]
+            fpath = OUT / fname
+            if fpath.exists():
+                b64 = base64.b64encode(fpath.read_bytes()).decode()
+                images.append({"name": fname, "url": f"/api/image/{fname}", "b64": b64})
+    return images
+
+
+async def _run_job(job_id: str, req: GenRequest):
+    job = JOBS[job_id]
+    job["status"] = "running"
+    seed = req.seed if req.seed and req.seed >= 0 else int(time.time() * 1000) % (2**32)
+    job["seed"] = seed
+    try:
+        resp = await asyncio.to_thread(_submit, req, seed)
+        pid = resp.get("prompt_id")
+        if not pid:
+            job["status"] = "error"
+            job["error"] = f"no prompt_id: {resp}"
+            return
+        job["prompt_id"] = pid
+        deadline = time.time() + 900
+        while time.time() < deadline:
+            await asyncio.sleep(2)
+            h = await asyncio.to_thread(_poll_history, pid)
+            if h:
+                images = await asyncio.to_thread(_collect_images, h, pid)
+                if images:
+                    job.update(
+                        {
+                            "status": "done",
+                            "elapsed_s": round(time.time() - job["created"], 1),
+                            "images": images,
+                        }
+                    )
+                    return
+        job["status"] = "error"
+        job["error"] = "timeout waiting for ComfyUI"
+    except Exception as e:
+        job["status"] = "error"
+        job["error"] = str(e)[:300]
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index():
     return HTMLResponse(Path("/home/user/app/index.html").read_text())
@@ -89,7 +150,7 @@ async def index():
 async def health():
     comfy_ok = False
     try:
-        st = _get("/system_stats", timeout=5)
+        st = await asyncio.to_thread(_get, "/system_stats", 5)
         comfy_ok = "system" in st
     except Exception:
         pass
@@ -97,6 +158,7 @@ async def health():
         "status": "ok",
         "uptime_s": int(time.time() - START),
         "comfyui": comfy_ok,
+        "jobs": {"active": sum(1 for j in JOBS.values() if j["status"] in ("queued", "running"))},
         "time": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
     }
 
@@ -104,7 +166,7 @@ async def health():
 @app.get("/api/stats")
 async def stats():
     try:
-        q = _get("/queue", timeout=5)
+        q = await asyncio.to_thread(_get, "/queue", 5)
         running = len(q.get("queue_running", []))
         pending = len(q.get("queue_pending", []))
     except Exception:
@@ -116,57 +178,35 @@ async def stats():
 async def generate(req: GenRequest):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(400, "prompt is required")
-    seed = req.seed if req.seed and req.seed >= 0 else int(time.time() * 1000) % (2**32)
-    t0 = time.time()
-    try:
-        resp = _post(
-            "/prompt",
-            {"prompt": build_wf(req, seed), "client_id": "ox-img-api"},
-            timeout=30,
-        )
-    except Exception as e:
-        raise HTTPException(503, f"comfyui submit failed: {e}")
-    pid = resp.get("prompt_id")
-    if not pid:
-        raise HTTPException(500, f"no prompt_id: {resp}")
-
-    deadline = time.time() + 600
-    images = []
-    while time.time() < deadline:
-        try:
-            h = _get(f"/history/{pid}", timeout=10)
-        except Exception:
-            h = {}
-        if h:
-            for node_id, node_out in h[pid]["outputs"].items():
-                for img in node_out.get("images", []):
-                    fname = img["filename"]
-                    fpath = OUT / fname
-                    if fpath.exists():
-                        b64 = base64.b64encode(fpath.read_bytes()).decode()
-                        images.append(
-                            {"name": fname, "url": f"/api/image/{fname}", "b64": b64}
-                        )
-            break
-        await asyncio.sleep(2)
-
-    if not images:
-        raise HTTPException(504, "generation timed out on CPU (queue too long?)")
-    return {
-        "status": "success",
-        "prompt_id": pid,
-        "seed": seed,
-        "elapsed_s": round(time.time() - t0, 1),
-        "width": req.width,
-        "height": req.height,
-        "steps": req.steps,
-        "images": images,
+    job_id = uuid.uuid4().hex[:12]
+    job = {
+        "job_id": job_id,
+        "status": "queued",
+        "created": time.time(),
+        "params": req.model_dump(),
     }
+    JOBS[job_id] = job
+    if len(JOBS) > MAX_JOBS:
+        for k in list(JOBS)[: len(JOBS) - MAX_JOBS]:
+            JOBS.pop(k, None)
+    asyncio.create_task(_run_job(job_id, req))
+    return {"job_id": job_id, "status": "queued"}
+
+
+@app.get("/api/job/{job_id}")
+async def job(job_id: str):
+    j = JOBS.get(job_id)
+    if not j:
+        raise HTTPException(404, "job not found")
+    out = {k: v for k, v in j.items() if k != "images"}
+    if j["status"] == "done":
+        out["images"] = j.get("images", [])
+        out["elapsed_s"] = j.get("elapsed_s")
+    return out
 
 
 @app.get("/api/image/{name}")
 async def image(name: str):
-    # safe path join — refuse traversal
     clean = Path(name).name
     fpath = OUT / clean
     if not fpath.exists():

@@ -9,7 +9,7 @@ CPU-only SD1.5) exposed through a Cloudflare Tunnel on your own domain.
 Browser / curl ──> https://ox-img.oxu.indevs.in
                       │  Cloudflare Tunnel (cloudflared in sandbox, token from GH secret)
                       ▼
-              FastAPI :8000  (site UI + /api/generate + /api/health)
+              FastAPI :80  (site UI + /api/generate + /api/health — tunnel route target)
                       │  localhost
                       ▼
               ComfyUI :8188 (SD1.5 txt2img, CPU)
@@ -31,7 +31,8 @@ GitHub Actions watchdog (cron */45 + on:push)
 ## Endpoints
 
 - `GET /` — the UI (prompt, presets, steps/CFG/size/batch/seed sliders)
-- `POST /api/generate` — `{"prompt": "...", "negative_prompt": "...", "width": 384, "height": 384, "steps": 16, "cfg": 7.0, "seed": -1, "batch": 1}` → `{"status","prompt_id","seed","elapsed_s","images":[{"name","url","b64"}]}`
+- `POST /api/generate` — `{"prompt": "...", "negative_prompt": "...", "width": 384, "height": 384, "steps": 16, "cfg": 7.0, "seed": -1, "batch": 1}` → `{"job_id": "...", "status": "queued"}` (async — CF's 100 s origin timeout kills sync gen on CPU)
+- `GET /api/job/<job_id>` — poll: `{"status": "queued|running|done|error", "seed", "elapsed_s", "images": [{"name","url","b64"}]}`
 - `GET /api/image/<file>` — generated PNG
 - `GET /api/health` — status + ComfyUI liveness
 - `GET /api/stats` — ComfyUI queue depth
