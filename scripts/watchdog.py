@@ -26,7 +26,7 @@ from e2b import Sandbox  # noqa: E402
 TEMPLATE = os.environ.get("E2B_TEMPLATE", "comfy-serve")
 FALLBACK = os.environ.get("E2B_FALLBACK_TEMPLATE", "desktop")
 SITE = os.environ.get("SITE_URL", "https://ox-img.oxu.indevs.in")
-REPLACE_BEFORE_S = int(os.environ.get("REPLACE_BEFORE_S", "1200"))  # 20 min
+REPLACE_BEFORE_S = int(os.environ.get("REPLACE_BEFORE_S", "2700"))  # 45 min: every 45-min cron tick forces a replacement -> phase stays locked, no gaps
 HEALTH_WAIT_S = int(os.environ.get("HEALTH_WAIT_S", "600"))
 
 
@@ -114,10 +114,10 @@ def spawn(template):
 
 
 def box_ready(sb):
-    """New box is serving: uvicorn on :80 AND cloudflared registered tunnel."""
+    """New box is serving: app responds on :80 AND cloudflared registered the tunnel."""
     try:
         r = sb.commands.run(
-            "ss -tln | grep -q ':80 ' && grep -q 'Registered tunnel connection' /tmp/cf.log && echo READY || echo NOT_READY",
+            "curl -s -m 5 http://127.0.0.1:80/api/health | grep -q comfyui && tail -3 /tmp/cf.log | grep -q 'Registered tunnel connection' && echo READY || echo NOT_READY",
             timeout=30,
         )
         return "READY" in r.stdout
