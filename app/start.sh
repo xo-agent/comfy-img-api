@@ -21,7 +21,8 @@ done
 echo "secrets present: cf_token=$(test -s .cf_token && echo yes || echo no) e2b_id=$(test -s .e2b_id && echo yes || echo no) e2b_key=$(test -s .e2b_key && echo yes || echo no)"
 
 # 2) clean stale runtime logs (template snapshots may carry them -> false positives)
-rm -f /tmp/cf.log /tmp/boot.log /tmp/app.log /tmp/keepalive.log /tmp/comfy.log
+#    NOTE: never rm /tmp/boot.log — this script writes to it
+rm -f /tmp/cf.log /tmp/app.log /tmp/keepalive.log /tmp/comfy.log
 # 3) pull latest app code (public repo, no auth)
 if [ -d /home/user/comfy-img-api/.git ]; then
   git -C /home/user/comfy-img-api pull --ff-only -q 2>/dev/null && echo "app updated" || echo "app pull failed (using baked copy)"
