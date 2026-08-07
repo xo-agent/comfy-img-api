@@ -6,6 +6,13 @@ cd /home/user || exit 1
 
 echo "=== boot $(date) ==="
 
+# 0) re-exec guard: if this script file changed on disk (git pull below rewrites it),
+#    bash may have buffered the old copy — re-exec forces a fresh read.
+if [ -z "$OXIMG_REEXEC" ]; then
+  export OXIMG_REEXEC=1
+  exec bash /home/user/app/start.sh
+fi
+
 # 1) wait for watchdog-injected secrets (CF token, E2B key, own id)
 for i in $(seq 1 60); do
   [ -s .cf_token ] && [ -s .e2b_id ] && break
