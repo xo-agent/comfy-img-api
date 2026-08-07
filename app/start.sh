@@ -36,7 +36,7 @@ echo "keepalive started"
 # 7) ComfyUI LAST (warms in background; site+API are up long before it's ready)
 NPROC=$(nproc)
 cd /home/user/ComfyUI
-nohup ./venv/bin/python main.py --cpu --cpu-threads "$NPROC" --port 8188 > /tmp/comfy.log 2>&1 &
+OMP_NUM_THREADS="$NPROC" nohup ./venv/bin/python main.py --cpu --port 8188 > /tmp/comfy.log 2>&1 &
 echo "comfy started (threads=$NPROC)"
 # 8) warm the default model: one tiny 1-step job right after ComfyUI is up,
 #    so the first user request doesn't pay the model-load penalty
