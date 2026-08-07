@@ -13,21 +13,43 @@ from pydantic import BaseModel
 
 COMFY = "http://127.0.0.1:8188"
 OUT = Path("/home/user/ComfyUI/output")
-CKPT = "v1-5-pruned-emaonly.safetensors"
 START = time.time()
 JOBS = {}  # job_id -> dict
 MAX_JOBS = 50
 
-app = FastAPI(title="Ox-Img", version="1.1.0")
+# Engine registry: model -> checkpoint + sensible defaults.
+# SD-Turbo: distilled for 1-4 steps, cfg ~1.0, euler/normal. ~4x faster than 16-step SD1.5 with >= quality.
+MODELS = {
+    "sd-turbo": {
+        "ckpt": "sd_turbo.safetensors",
+        "steps": 4,
+        "cfg": 1.0,
+        "width": 512,
+        "height": 512,
+        "max_steps": 8,
+    },
+    "sd15": {
+        "ckpt": "v1-5-pruned-emaonly.safetensors",
+        "steps": 16,
+        "cfg": 7.0,
+        "width": 512,
+        "height": 512,
+        "max_steps": 40,
+    },
+}
+DEFAULT_MODEL = "sd-turbo"
+
+app = FastAPI(title="Ox-Img", version="2.0.0")
 
 
 class GenRequest(BaseModel):
     prompt: str
     negative_prompt: str = "ugly, blurry, low quality, deformed, watermark, text, jpeg artifacts"
-    width: int = 384
-    height: int = 384
-    steps: int = 16
-    cfg: float = 7.0
+    model: str = DEFAULT_MODEL
+    width: int = 0  # 0 -> model default
+    height: int = 0
+    steps: int = 0  # 0 -> model default
+    cfg: float = 0.0  # 0 -> model default
     seed: int = -1
     batch: int = 1
 
@@ -48,13 +70,23 @@ def _get(path: str, timeout: int = 15):
 
 
 def build_wf(p: GenRequest, seed: int) -> dict:
+    m = MODELS.get(p.model)
+    if not m:
+        raise ValueError(f"unknown model {p.model!r}, use one of {list(MODELS)}")
+    steps = int(p.steps) if p.steps and p.steps > 0 else m["steps"]
+    cfg = float(p.cfg) if p.cfg and p.cfg > 0 else m["cfg"]
+    w = int(p.width) if p.width and p.width > 0 else m["width"]
+    h = int(p.height) if p.height and p.height > 0 else m["height"]
+    steps = max(1, min(steps, m["max_steps"]))
+    w = max(256, min(w, 768))
+    h = max(256, min(h, 768))
     return {
         "3": {
             "class_type": "KSampler",
             "inputs": {
                 "seed": seed,
-                "steps": max(1, min(p.steps, 40)),
-                "cfg": max(1.0, min(p.cfg, 15.0)),
+                "steps": steps,
+                "cfg": cfg,
                 "sampler_name": "euler",
                 "scheduler": "normal",
                 "denoise": 1.0,
@@ -64,12 +96,12 @@ def build_wf(p: GenRequest, seed: int) -> dict:
                 "latent_image": ["5", 0],
             },
         },
-        "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": CKPT}},
+        "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": m["ckpt"]}},
         "5": {
             "class_type": "EmptyLatentImage",
             "inputs": {
-                "width": max(256, min(p.width, 768)),
-                "height": max(256, min(p.height, 768)),
+                "width": w,
+                "height": h,
                 "batch_size": max(1, min(p.batch, 4)),
             },
         },
@@ -158,6 +190,7 @@ async def health():
         "status": "ok",
         "uptime_s": int(time.time() - START),
         "comfyui": comfy_ok,
+        "models": list(MODELS),
         "jobs": {"active": sum(1 for j in JOBS.values() if j["status"] in ("queued", "running"))},
         "time": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
     }
@@ -178,6 +211,8 @@ async def stats():
 async def generate(req: GenRequest):
     if not req.prompt or not req.prompt.strip():
         raise HTTPException(400, "prompt is required")
+    if req.model not in MODELS:
+        raise HTTPException(400, f"unknown model {req.model!r}, use one of {list(MODELS)}")
     job_id = uuid.uuid4().hex[:12]
     job = {
         "job_id": job_id,

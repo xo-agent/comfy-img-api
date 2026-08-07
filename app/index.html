@@ -61,6 +61,11 @@
       <div class="presets" id="presets"></div>
       <label>Negative prompt</label>
       <textarea id="neg" style="min-height:44px">ugly, blurry, low quality, deformed, watermark, text</textarea>
+      <label>Engine</label>
+      <select id="engine" style="width:100%;background:#0b1120;border:1px solid var(--line);color:var(--txt);padding:9px;border-radius:8px">
+        <option value="sd-turbo" selected>⚡ SD-Turbo — fast (default, ~10–20s)</option>
+        <option value="sd15">🎨 SD 1.5 — quality (~1–2 min)</option>
+      </select>
       <div class="row">
         <div><label>Steps <span class="val" id="v_steps">16</span></label><input type="range" id="steps" min="4" max="40" value="16"></div>
         <div><label>CFG <span class="val" id="v_cfg">7.0</span></label><input type="range" id="cfg" min="1" max="15" value="7" step="0.5"></div>
@@ -102,6 +107,10 @@ presets.forEach(p => { const c=document.createElement("span"); c.className="chip
   c.onclick=()=>{ $("prompt").value = p + ", " + $("prompt").value.replace(/^(cyberpunk|photoreal|anime|fantasy|oil painting|steampunk|synthwave|portrait),\s*/,""); }; $("presets").appendChild(c); });
 $("steps").oninput=e=>$("v_steps").textContent=e.target.value;
 $("cfg").oninput=e=>$("v_cfg").textContent=e.target.value;
+$("engine").onchange=e=>{
+  if(e.target.value==="sd-turbo"){ $("steps").value=4; $("v_steps").textContent=4; $("cfg").value=1; $("v_cfg").textContent=1; $("size").value=512; }
+  else { $("steps").value=16; $("v_steps").textContent=16; $("cfg").value=7; $("v_cfg").textContent=7; $("size").value=512; }
+};
 
 async function health(){
   try{ const r=await fetch("/api/health"); const j=await r.json();
@@ -118,6 +127,7 @@ $("go").onclick = async () => {
     const r = await fetch("/api/generate", {method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({
         prompt: $("prompt").value, negative_prompt: $("neg").value,
+        model: $("engine").value,
         steps: +$("steps").value, cfg: +$("cfg").value,
         width: +$("size").value, height: +$("size").value,
         batch: +$("batch").value, seed: +$("seed").value })});

@@ -25,6 +25,11 @@ if [ ! -f models/checkpoints/v1-5-pruned-emaonly.safetensors ]; then
   wget -q -O models/checkpoints/v1-5-pruned-emaonly.safetensors \
     "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors"
 fi
+if [ ! -f models/checkpoints/sd_turbo.safetensors ]; then
+  echo "downloading SD-Turbo (2.4GB)..."
+  wget -q -O models/checkpoints/sd_turbo.safetensors \
+    "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors"
+fi
 echo "model done"
 
 # cloudflared binary

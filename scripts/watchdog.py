@@ -26,7 +26,7 @@ from e2b import Sandbox  # noqa: E402
 TEMPLATE = os.environ.get("E2B_TEMPLATE", "comfy-serve")
 FALLBACK = os.environ.get("E2B_FALLBACK_TEMPLATE", "desktop")
 SITE = os.environ.get("SITE_URL", "https://ox-img.oxu.indevs.in")
-REPLACE_BEFORE_S = int(os.environ.get("REPLACE_BEFORE_S", "3000"))  # 50 min > 45-min cron cadence: every cron tick sees <50 min left -> always replaces, phase locked, zero gaps
+REPLACE_BEFORE_S = int(os.environ.get("REPLACE_BEFORE_S", "900"))  # 15 min: backup only — in-box keepalive self-replaces at 20 min; cron is the safety net
 HEALTH_WAIT_S = int(os.environ.get("HEALTH_WAIT_S", "600"))
 
 
