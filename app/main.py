@@ -64,6 +64,38 @@ def _post(path: str, payload: dict, timeout: int = 30):
         return json.loads(r.read())
 
 
+def _drain_queue(wait_s=60):
+    """Wait until ComfyUI's queue is empty (no running/pending jobs)."""
+    t0 = time.time()
+    while time.time() - t0 < wait_s:
+        try:
+            q = _get("/queue", 5)
+            if not q.get("queue_running") and not q.get("queue_pending"):
+                return
+        except Exception:
+            pass
+        time.sleep(2)
+
+
+def _free_models():
+    """Unload all checkpoints so the next model load starts from a clean slate."""
+    try:
+        req = urllib.request.Request(
+            COMFY + "/free",
+            data=b'{"unload_models": true, "free_memory": true}',
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status
+    except Exception:
+        return None
+
+
+MODEL_LOCK = asyncio.Lock()
+LAST_MODEL = None
+
+
 def _get(path: str, timeout: int = 15):
     with urllib.request.urlopen(COMFY + path, timeout=timeout) as r:
         return json.loads(r.read())
@@ -139,11 +171,18 @@ def _collect_images(h: dict, pid: str):
 
 
 async def _run_job(job_id: str, req: GenRequest):
+    global LAST_MODEL
     job = JOBS[job_id]
     job["status"] = "running"
     seed = req.seed if req.seed and req.seed >= 0 else int(time.time() * 1000) % (2**32)
     job["seed"] = seed
     try:
+        # model switch: free the previous checkpoint first (8GB box OOMs otherwise)
+        async with MODEL_LOCK:
+            if LAST_MODEL and LAST_MODEL != req.model:
+                await asyncio.to_thread(_drain_queue)
+                await asyncio.to_thread(_free_models)
+            LAST_MODEL = req.model
         resp = await asyncio.to_thread(_submit, req, seed)
         pid = resp.get("prompt_id")
         if not pid:
