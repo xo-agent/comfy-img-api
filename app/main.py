@@ -96,6 +96,14 @@ def _free_models():
         return None
 
 
+def _comfy_alive():
+    """True if ComfyUI answers system_stats (backend actually running)."""
+    try:
+        return "system" in _get("/system_stats", 5)
+    except Exception:
+        return False
+
+
 MODEL_LOCK = asyncio.Lock()
 LAST_MODEL = None
 
@@ -223,10 +231,13 @@ async def _run_job(job_id: str, req: GenRequest):
                     return
             else:
                 fail_n += 1
-                if fail_n >= 10:  # ~20s of ComfyUI being unreachable -> backend died
-                    job["status"] = "error"
-                    job["error"] = "backend restarting, please retry in a minute"
-                    return
+                if fail_n >= 15:  # ~30s without history AND comfy unreachable -> backend died
+                    alive = await asyncio.to_thread(_comfy_alive)
+                    if not alive:
+                        job["status"] = "error"
+                        job["error"] = "backend restarting, please retry in a minute"
+                        return
+                    fail_n = 0
         job["status"] = "error"
         job["error"] = "timeout waiting for ComfyUI"
     except Exception as e:
