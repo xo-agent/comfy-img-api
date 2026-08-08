@@ -27,6 +27,12 @@ rm -f /tmp/cf.log /tmp/app.log /tmp/keepalive.log /tmp/comfy.log
 if [ -d /home/user/comfy-img-api/.git ]; then
   git -C /home/user/comfy-img-api pull --ff-only -q 2>/dev/null && echo "app updated" || echo "app pull failed (using baked copy)"
 fi
+# 3.5) self-heal: ensure the x2 upscale model exists (templates may lack it)
+if [ ! -s /home/user/ComfyUI/models/upscale_models/RealESRGAN_x2plus.pth ]; then
+  echo "downloading RealESRGAN_x2plus..."
+  wget -q -O /home/user/ComfyUI/models/upscale_models/RealESRGAN_x2plus.pth \
+    "https://huggingface.co/ai-forever/Real-ESRGAN/resolve/main/RealESRGAN_x2.pth" && echo "x2plus ready" || echo "x2plus download FAILED"
+fi
 
 # 4) start FastAPI FIRST (serves site + API on :80 — the CF tunnel route target)
 cd /home/user/app
