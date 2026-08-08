@@ -109,8 +109,8 @@ presets.forEach(p => { const c=document.createElement("span"); c.className="chip
 $("steps").oninput=e=>$("v_steps").textContent=e.target.value;
 $("cfg").oninput=e=>$("v_cfg").textContent=e.target.value;
 $("engine").onchange=e=>{
-  if(e.target.value==="sd-turbo"){ $("steps").value=6; $("v_steps").textContent=6; $("cfg").value=1.5; $("v_cfg").textContent=1.5; $("size").value=512; }
-  else { $("steps").value=20; $("v_steps").textContent=20; $("cfg").value=7; $("v_cfg").textContent=7; $("size").value=640; }
+  if(e.target.value==="sd-turbo"){ $("steps").value=6; $("v_steps").textContent=6; $("cfg").value=1.5; $("v_cfg").textContent=1.5; $("size").value=384; }
+  else { $("steps").value=20; $("v_steps").textContent=20; $("cfg").value=7; $("v_cfg").textContent=7; $("size").value=512; }
 };
 
 async function health(){

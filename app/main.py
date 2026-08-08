@@ -18,27 +18,28 @@ JOBS = {}  # job_id -> dict
 MAX_JOBS = 50
 
 # Engine registry: model -> checkpoint + sensible defaults.
-# SD-Turbo: distilled for 1-4 steps, cfg ~1.0, euler/normal. ~4x faster than 16-step SD1.5 with >= quality.
+# Base res is deliberately small: the ESRGAN x2 upscale doubles it (768/1024 out),
+# and keeping base low means the upscale pass fits in the 8GB box alongside the checkpoint.
 MODELS = {
     "sd-turbo": {
         "ckpt": "sd_turbo.safetensors",
         "steps": 6,
         "cfg": 1.5,
-        "width": 512,
-        "height": 512,
+        "width": 384,
+        "height": 384,
         "max_steps": 10,
     },
     "sd15": {
         "ckpt": "v1-5-pruned-emaonly.safetensors",
         "steps": 20,
         "cfg": 7.0,
-        "width": 640,
-        "height": 640,
+        "width": 512,
+        "height": 512,
         "max_steps": 40,
     },
 }
 DEFAULT_MODEL = "sd-turbo"
-UPSCALE_MODEL = "RealESRGAN_x4plus.pth"
+UPSCALE_MODEL = "RealESRGAN_x2plus.pth"  # x2 only — x4plus at 512 base OOMs the 8GB box (512->2048)
 UPSCALE_DIR = Path("/home/user/ComfyUI/models/upscale_models")
 
 app = FastAPI(title="Ox-Img", version="2.0.0")
@@ -148,9 +149,9 @@ def build_wf(p: GenRequest, seed: int) -> dict:
             "inputs": {"filename_prefix": "oximg", "images": ["8", 0]},
         },
     }
-    # RealESRGAN 2x upscale pass (crisp detail; raw 512 outputs are soft)
+    # RealESRGAN x2 upscale pass (crisp detail; raw outputs are soft)
     upscale = max(1, min(int(p.upscale or 1), 2))
-    if upscale == 2 and (UPSCALE_DIR / UPSCALE_MODEL).exists() and w * 2 <= 2048 and h * 2 <= 2048:
+    if upscale == 2 and (UPSCALE_DIR / UPSCALE_MODEL).exists() and w * 2 <= 1536 and h * 2 <= 1536:
         wf["10"] = {"class_type": "UpscaleModelLoader", "inputs": {"model_name": UPSCALE_MODEL}}
         wf["11"] = {
             "class_type": "ImageUpscaleWithModel",
@@ -204,10 +205,12 @@ async def _run_job(job_id: str, req: GenRequest):
             return
         job["prompt_id"] = pid
         deadline = time.time() + 900
+        fail_n = 0
         while time.time() < deadline:
             await asyncio.sleep(2)
             h = await asyncio.to_thread(_poll_history, pid)
             if h:
+                fail_n = 0
                 images = await asyncio.to_thread(_collect_images, h, pid)
                 if images:
                     job.update(
@@ -217,6 +220,12 @@ async def _run_job(job_id: str, req: GenRequest):
                             "images": images,
                         }
                     )
+                    return
+            else:
+                fail_n += 1
+                if fail_n >= 10:  # ~20s of ComfyUI being unreachable -> backend died
+                    job["status"] = "error"
+                    job["error"] = "backend restarting, please retry in a minute"
                     return
         job["status"] = "error"
         job["error"] = "timeout waiting for ComfyUI"
