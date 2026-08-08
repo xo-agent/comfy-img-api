@@ -22,22 +22,24 @@ MAX_JOBS = 50
 MODELS = {
     "sd-turbo": {
         "ckpt": "sd_turbo.safetensors",
-        "steps": 4,
-        "cfg": 1.0,
+        "steps": 6,
+        "cfg": 1.5,
         "width": 512,
         "height": 512,
-        "max_steps": 8,
+        "max_steps": 10,
     },
     "sd15": {
         "ckpt": "v1-5-pruned-emaonly.safetensors",
-        "steps": 16,
+        "steps": 20,
         "cfg": 7.0,
-        "width": 512,
-        "height": 512,
+        "width": 640,
+        "height": 640,
         "max_steps": 40,
     },
 }
 DEFAULT_MODEL = "sd-turbo"
+UPSCALE_MODEL = "RealESRGAN_x4plus.pth"
+UPSCALE_DIR = Path("/home/user/ComfyUI/models/upscale_models")
 
 app = FastAPI(title="Ox-Img", version="2.0.0")
 
@@ -52,6 +54,7 @@ class GenRequest(BaseModel):
     cfg: float = 0.0  # 0 -> model default
     seed: int = -1
     batch: int = 1
+    upscale: int = 2  # 1 = raw, 2 = RealESRGAN 2x upscale
 
 
 def _post(path: str, payload: dict, timeout: int = 30):
@@ -112,7 +115,7 @@ def build_wf(p: GenRequest, seed: int) -> dict:
     steps = max(1, min(steps, m["max_steps"]))
     w = max(256, min(w, 768))
     h = max(256, min(h, 768))
-    return {
+    wf = {
         "3": {
             "class_type": "KSampler",
             "inputs": {
@@ -145,6 +148,16 @@ def build_wf(p: GenRequest, seed: int) -> dict:
             "inputs": {"filename_prefix": "oximg", "images": ["8", 0]},
         },
     }
+    # RealESRGAN 2x upscale pass (crisp detail; raw 512 outputs are soft)
+    upscale = max(1, min(int(p.upscale or 1), 2))
+    if upscale == 2 and (UPSCALE_DIR / UPSCALE_MODEL).exists() and w * 2 <= 2048 and h * 2 <= 2048:
+        wf["10"] = {"class_type": "UpscaleModelLoader", "inputs": {"model_name": UPSCALE_MODEL}}
+        wf["11"] = {
+            "class_type": "ImageUpscaleWithModel",
+            "inputs": {"upscale_model": ["10", 0], "image": ["8", 0]},
+        }
+        wf["9"]["inputs"]["images"] = ["11", 0]
+    return wf
 
 
 def _submit(req: GenRequest, seed: int):

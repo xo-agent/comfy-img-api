@@ -30,6 +30,12 @@ if [ ! -f models/checkpoints/sd_turbo.safetensors ]; then
   wget -q -O models/checkpoints/sd_turbo.safetensors \
     "https://huggingface.co/stabilityai/sd-turbo/resolve/main/sd_turbo.safetensors"
 fi
+mkdir -p models/upscale_models
+if [ ! -f models/upscale_models/RealESRGAN_x4plus.pth ]; then
+  echo "downloading RealESRGAN_x4plus (65MB)..."
+  wget -q -O models/upscale_models/RealESRGAN_x4plus.pth \
+    "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+fi
 echo "model done"
 
 # cloudflared binary
