@@ -124,6 +124,7 @@ def build_wf(p: GenRequest, seed: int) -> dict:
     steps = max(1, min(steps, m["max_steps"]))
     w = max(256, min(w, 768))
     h = max(256, min(h, 768))
+    prefix = f"oximg_{int(time.time())}"  # unique per job — filenames must never collide (CF edge cache)
     wf = {
         "3": {
             "class_type": "KSampler",
@@ -154,7 +155,7 @@ def build_wf(p: GenRequest, seed: int) -> dict:
         "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
         "9": {
             "class_type": "SaveImage",
-            "inputs": {"filename_prefix": "oximg", "images": ["8", 0]},
+            "inputs": {"filename_prefix": prefix, "images": ["8", 0]},
         },
     }
     # RealESRGAN x2 upscale pass (crisp detail; raw outputs are soft)
@@ -318,4 +319,5 @@ async def image(name: str):
     fpath = OUT / clean
     if not fpath.exists():
         raise HTTPException(404, "image not found")
-    return FileResponse(fpath, media_type="image/png")
+    # no-store: CF edge cached reused filenames -> users got stale 512 images
+    return FileResponse(fpath, media_type="image/png", headers={"Cache-Control": "no-store, max-age=0"})
